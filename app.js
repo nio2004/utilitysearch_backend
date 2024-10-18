@@ -9,7 +9,7 @@ app.use(express.json()); // Parse incoming JSON payloads
 
 const MONGO_URI = 'mongodb+srv://Nidhish:Nidhish@coephackathon.pbuvv.mongodb.net/?retryWrites=true&w=majority&appName=CoepHackathon';
 const DB_NAME = 'mytestdb';
-const REPO_DIR = '/Cloned_repo'; // Directory to clone the repo
+const REPO_DIR = './Cloned_repo'; // Directory to clone the repo
 const REPOSITORY_NAME = 'Code_Util_COEP'; // Specify the repository name
 
 async function updateMongoIfChanged(filePath, newContent) {
