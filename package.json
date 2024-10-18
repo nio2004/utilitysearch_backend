@@ -11,6 +11,7 @@
   "license": "ISC",
   "dependencies": {
     "express": "^4.21.1",
+    "groq-sdk": "^0.7.0",
     "mongodb": "^6.9.0",
     "nodemon": "^3.1.7",
     "nodesync": "file:"
