@@ -3,14 +3,16 @@ const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const { MongoClient } = require('mongodb');
+const Groq = require('groq-sdk');
 
+const groq = new Groq({ apiKey: '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' });
 const app = express();
 app.use(express.json()); // Parse incoming JSON payloads
 
-const MONGO_URI = 'mongodb+srv://Nidhish:Nidhish@coephackathon.pbuvv.mongodb.net/?retryWrites=true&w=majority&appName=CoepHackathon';
+const MONGO_URI = 'mongodb+srv://Nidhish:Nidhish@coephackathon.pbuvv.mongodb.net/mytestdb?retryWrites=true&w=majority&appName=CoepHackathon';
 const DB_NAME = 'mytestdb';
-const REPO_DIR = './Cloned_repo'; // Directory to clone the repo
-const REPOSITORY_NAME = 'Code_Util_COEP'; // Specify the repository name
+const REPO_DIR = './testdir'; // Directory to clone the repo
+const REPOSITORY_NAME = 'test-repo-utilitysearch'; // Specify the repository name
 
 async function updateMongoIfChanged(filePath, newContent) {
   const client = new MongoClient(MONGO_URI);
@@ -27,13 +29,15 @@ async function updateMongoIfChanged(filePath, newContent) {
       // Compare and update if the content has changed
       if (existingEntry.code_snippet !== newContent) {
         console.log(`Updating content for ${filePath}`);
+        const list_descp_tags = await groqmain(newContent);
+        await delay(5000);
         await collection.updateOne(
           { file_path: filePath },
           {
             $set: {
               code_snippet: newContent,  // Update code_snippet with new content
-              fullplot: 'Auto-generated update', // You can update fullplot if needed
-              tags: ['Updated tag'] // Update tags if required
+              fullplot: list_descp_tags[0], // You can update fullplot if needed
+              tags: list_descp_tags[1] // Update tags if required
             }
           }
         );
@@ -43,12 +47,14 @@ async function updateMongoIfChanged(filePath, newContent) {
     } else {
       console.log(`Inserting new data for ${filePath}`);
       // Insert the new document
+      const list_descp_tags = await groqmain(newContent);
+      await delay(5000);
       await collection.insertOne({
         repository: REPOSITORY_NAME,
         file_path: filePath,
         code_snippet: newContent, // File content goes here
-        fullplot: 'Auto-generated description', // Add a description or plot
-        tags: ['Python', 'Sample'] // Add relevant tags
+        fullplot: list_descp_tags[0], // Add a description or plot
+        tags: list_descp_tags[1] // Add relevant tags
       });
     }
   } finally {
@@ -56,9 +62,9 @@ async function updateMongoIfChanged(filePath, newContent) {
   }
 }
 
-app.get('/get',async(req,res)=> {
-    res.status(200).send('success');
-})
+app.get('/get', async (req, res) => {
+  res.status(200).send('success');
+});
 
 app.post('/webhook', async (req, res) => {
   const payload = req.body;
@@ -71,23 +77,14 @@ app.post('/webhook', async (req, res) => {
     try {
       if (!fs.existsSync(REPO_DIR)) {
         console.log('Cloning repository...');
-        execSync(`git clone https://github.com/Nidhish-714/${REPOSITORY_NAME}.git ${REPO_DIR}`);
+        execSync(`git clone https://github.com/nio2004/${REPOSITORY_NAME}.git ${REPO_DIR}`);
       } else {
         console.log('Pulling latest changes...');
         execSync(`git -C ${REPO_DIR} pull`);
       }
 
-      // Read the contents of the repository (example: reading all files in a directory)
-      const files = fs.readdirSync(REPO_DIR);
-
-      for (const file of files) {
-        const filePath = path.join(REPO_DIR, file);
-        if (fs.lstatSync(filePath).isFile()) {
-          const fileContent = fs.readFileSync(filePath, 'utf8');
-          // Compare the file content with MongoDB and update if necessary
-          await updateMongoIfChanged(filePath, fileContent);
-        }
-      }
+      // Traverse the repository directory and process each file
+      await traverseDirectory(REPO_DIR);
 
       res.status(200).send('Webhook processed successfully');
     } catch (err) {
@@ -98,6 +95,61 @@ app.post('/webhook', async (req, res) => {
     res.status(400).send('Unsupported event type');
   }
 });
+
+async function traverseDirectory(directoryPath) {
+  // Read the contents of the current directory
+  const files = fs.readdirSync(directoryPath);
+
+  // Iterate through each file/directory in the current directory
+  for (const file of files) {
+    const filePath = path.join(directoryPath, file);
+
+    // Skip hidden directories (like .git) and files
+    if (file.startsWith('.')) {
+      console.log(`Skipping hidden directory or file: ${file}`);
+      continue;
+    }
+
+    // Check if it is a directory or a file
+    if (fs.lstatSync(filePath).isDirectory()) {
+      // If it's a directory, recursively traverse it
+      await traverseDirectory(filePath);
+    } else if (fs.lstatSync(filePath).isFile()) {
+      // If it's a file, read the file content and process it
+      const fileContent = fs.readFileSync(filePath, 'utf8');
+      // Call your function to update MongoDB if needed
+      await updateMongoIfChanged(filePath, fileContent);
+    }
+  }
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function groqmain(code) {
+  const descriptionCompletion = await getGroqChatCompletion(
+    `You are a helpful coding assistant that supports in analysing code and generating a description of that code in one sentence. Just write description about code. User Query: ${code}`
+  );
+
+  const tagsCompletion = await getGroqChatCompletion(
+    `You are a helpful coding assistant that supports in analysing code and generating technical tags. Just write technical tags in list about code. User Query: ${code}`
+  );
+
+  return [descriptionCompletion.choices[0]?.message?.content || "", tagsCompletion.choices[0]?.message?.content || ""];
+}
+
+async function getGroqChatCompletion(userMessage) {
+  return groq.chat.completions.create({
+    messages: [
+      {
+        role: "user",
+        content: userMessage,
+      },
+    ],
+    model: "mixtral-8x7b-32768",
+  });
+}
 
 // Start the server
 const PORT = process.env.PORT || 3000;
