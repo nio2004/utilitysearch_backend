@@ -56,6 +56,10 @@ async function updateMongoIfChanged(filePath, newContent) {
   }
 }
 
+app.get('/get',async(req,res)=> {
+    res.status(200).send({"status":"success"});
+})
+
 app.post('/webhook', async (req, res) => {
   const payload = req.body;
 
